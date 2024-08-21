@@ -1,9 +1,9 @@
-import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
-import { InjectRedis } from '@nestjs-modules/ioredis';
+import { Inject, Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import { v4 as uuidv4 } from 'uuid';
-import Redis from 'ioredis';
-import { RedisModifiers } from '@/enums';
-import { REPORT_HISTORY_TTL, REPORT_UPDATE_DELAY_MS } from '@/constants';
+import { REPORT_HISTORY_TTL, REPORT_UPDATE_DELAY_MS, SETTINGS } from '../constants';
+import { BeaconSettings } from '../types/beacon-settings.type';
+import { getReportKey } from '../helpers';
+import { RedisService } from './redis.service';
 
 @Injectable()
 export class ReportingService implements OnModuleDestroy {
@@ -13,62 +13,95 @@ export class ReportingService implements OnModuleDestroy {
 
   private updateTimers: Map<string, NodeJS.Timeout> = new Map();
 
-  constructor(@InjectRedis() private readonly redis: Redis) {}
+  constructor(
+    @Inject(SETTINGS) private readonly settings: BeaconSettings,
+    private readonly redis: RedisService
+  ) {}
 
-  startNewReport<T extends object>(reportName: string, initialValues?: T): string {
-    const processId = uuidv4();
-    this.activeReports.set(processId, initialValues ?? {});
-    Logger.verbose(`Started new report ${reportName} with ID ${processId}`);
-    return processId;
+  async startNewReport<T extends object>(reportName: string, initialValues?: T): Promise<string> {
+    const reportId = uuidv4();
+    const reportListChannel = getReportKey('list', this.settings);
+    this.activeReports.set(reportId, initialValues ?? {});
+    const currents = await this.redis.get(reportListChannel);
+
+    const updatedList = {
+      ...(currents ?? {}),
+      [reportId]: { name: reportName, status: 'running', createdAt: new Date().toISOString() },
+    };
+
+    await this.redis.set(reportListChannel, updatedList);
+    await this.redis.publish(reportListChannel, updatedList);
+
+    Logger.verbose(`Started new report "${reportName}" with ID ${reportId}`);
+    return reportId;
   }
 
-  updateReport<T extends object>(processId: string, changes: Partial<T>) {
-    const report = this.activeReports.get(processId);
+  updateReport<T extends object>(reportId: string, changes: Partial<T>) {
+    const report = this.activeReports.get(reportId);
     if (report) {
-      this.activeReports.set(processId, { ...report, ...changes });
+      this.activeReports.set(reportId, { ...report, ...changes });
 
       // Accumulate updates locally
-      const existingUpdates = this.throttledUpdates.get(processId) ?? {};
-      this.throttledUpdates.set(processId, { ...existingUpdates, ...changes });
+      const existingUpdates = this.throttledUpdates.get(reportId) || {};
+      this.throttledUpdates.set(reportId, { ...existingUpdates, ...changes });
 
       // If no timer exists, start one
-      if (!this.updateTimers.has(processId)) {
+      if (!this.updateTimers.has(reportId)) {
         this.updateTimers.set(
-          processId,
-          setTimeout(() => this.flushUpdates(processId), REPORT_UPDATE_DELAY_MS)
+          reportId,
+          setTimeout(() => this.flushUpdates(reportId), REPORT_UPDATE_DELAY_MS)
         );
       }
     } else {
-      console.error(`Active report with ID ${processId} not found.`);
+      Logger.error(`Active report with ID ${reportId} not found.`);
     }
   }
 
-  private async flushUpdates(processId: string) {
-    const updates = this.throttledUpdates.get(processId);
+  private async flushUpdates(reportId: string) {
+    Logger.verbose(`Flushing updates for report ID ${reportId}`);
+    const updates = this.throttledUpdates.get(reportId);
     if (updates) {
-      this.throttledUpdates.delete(processId);
-      await this.redis.publish(`report:${processId}`, JSON.stringify(updates));
+      this.throttledUpdates.delete(reportId);
+      await this.redis.publish(getReportKey(reportId, this.settings), updates);
     }
 
     // Clear the timer
-    this.updateTimers.delete(processId);
+    this.updateTimers.delete(reportId);
   }
 
-  async finishReport(processId: string) {
-    const report = this.activeReports.get(processId);
+  async finishReport(reportId: string) {
+    const report = this.activeReports.get(reportId);
     if (report) {
       // Ensure all updates are flushed before finishing
-      await this.flushUpdates(processId);
+      await this.flushUpdates(reportId);
+
+      const channel = getReportKey(reportId, this.settings);
 
       // Move to inactive reports in Redis with TTL
-      await this.redis.set(`report:${processId}`, JSON.stringify(report), RedisModifiers.Expire, REPORT_HISTORY_TTL);
-      this.activeReports.delete(processId);
-      Logger.verbose(`Report ID ${processId} moved to inactive.`);
+      await this.redis.publish(channel, report, REPORT_HISTORY_TTL);
+      this.activeReports.delete(reportId);
+      Logger.verbose(`Report ID ${reportId} moved to inactive.`);
 
       // Notify subscribers that the report is finished
-      await this.redis.publish(`report:${processId}:finished`, 'finished');
+      await this.redis.closeChannel(channel);
+
+      const reportListChannel = getReportKey('list', this.settings);
+      let currents = await this.redis.get<Record<string, object>>(reportListChannel);
+
+      if (!currents) {
+        Logger.error('No active reports found');
+        currents = {};
+      }
+
+      const updatedList = {
+        ...currents,
+        [reportId]: { ...currents[reportId], status: 'finished', finishedAt: new Date().toISOString() },
+      };
+
+      await this.redis.set(reportListChannel, updatedList);
+      await this.redis.publish(reportListChannel, updatedList);
     } else {
-      console.error(`Active report with ID ${processId} not found.`);
+      Logger.error(`Active report with ID ${reportId} not found.`);
     }
   }
 

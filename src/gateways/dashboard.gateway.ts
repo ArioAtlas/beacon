@@ -8,7 +8,8 @@ import {
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { Logger } from '@nestjs/common';
-import { ReportingService, SubscriptionService } from '@/services';
+import { SubscriptionService } from '../services/subscription.service';
+import { ReportingService } from '../services/reporting.service';
 
 @WebSocketGateway({ cors: { origin: '*' } })
 export class DashboardGateway implements OnGatewayConnection, OnGatewayDisconnect {
@@ -21,13 +22,13 @@ export class DashboardGateway implements OnGatewayConnection, OnGatewayDisconnec
 
   async handleConnection(client: Socket) {
     Logger.verbose(`Client #${client.id} connected!`);
-
-    client.emit('message', 'Hallo manen');
-    // Optionally, send active and inactive reports on connection
+    await this.subscription.subscribeToReportList(client);
   }
 
   handleDisconnect(client: Socket) {
     Logger.verbose(`Client #${client.id} disconnected!`);
+
+    // Unsubscribe from all reports
   }
 
   @SubscribeMessage('subscribe')
