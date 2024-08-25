@@ -12,6 +12,24 @@
     ],
     "overrides": [
       {
+        "files": ["*.ts", "*.tsx", "*.js", "*.jsx"],
+        "rules": {
+          "@nx/enforce-module-boundaries": [
+            "error",
+            {
+              "enforceBuildableLibDependency": true,
+              "allow": [],
+              "depConstraints": [
+                {
+                  "sourceTag": "*",
+                  "onlyDependOnLibsWithTags": ["*"]
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
         "files": ["*.ts"],
         "extends": [
           "airbnb-typescript/base",
@@ -29,6 +47,11 @@
           "@typescript-eslint/lines-between-class-members": "off",
           "@typescript-eslint/no-unused-vars": "warn"
         }
+      },
+      {
+        "files": ["*.spec.ts", "*.spec.tsx", "*.spec.js", "*.spec.jsx"],
+        "env": { "jest": true },
+        "rules": {}
       }
     ]
   }
