@@ -29,7 +29,10 @@
     "prettier-eslint": "16.2.0",
     "prettier-eslint-cli": "8.0.1",
     "ts-node": "^10.9.2",
-    "typescript": "^5.4.5"
+    "typescript": "^5.4.5",
+    "nx": "19.6.2",
+    "@nx/eslint": "19.6.2",
+    "@nx/jest": "19.6.2"
   },
   "dependencies": {
     "@nestjs-modules/ioredis": "^2.0.2",
@@ -38,5 +41,6 @@
     "ioredis": "^5.4.1",
     "socket.io": "^4.7.5",
     "uuid": "^10.0.0"
-  }
+  },
+  "nx": {}
 }
