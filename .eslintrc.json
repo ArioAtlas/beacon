@@ -4,7 +4,7 @@
       "ecmaVersion": 2020,
       "sourceType": "commonjs"
     },
-    "plugins": ["@typescript-eslint","import"],
+    "plugins": ["@nx","@typescript-eslint","import"],
     "extends": [
       "prettier", 
       "plugin:prettier/recommended",

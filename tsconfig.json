@@ -7,14 +7,15 @@
     "emitDecoratorMetadata": true,
     "experimentalDecorators": true,
     "importHelpers": true,
-    "target": "es2015",
+    "target": "ES2021",
     "module": "esnext",
     "lib": ["es2020", "dom"],
     "skipLibCheck": true,
     "skipDefaultLibCheck": true,
     "baseUrl": ".",
-    "paths": {}
+    "paths": {
+      "@beacon/client/nest": ["client/nest/src/index.ts"]
+    }
   },
-  "include": ["src/**/*.ts"],
   "exclude": ["node_modules", "**/*.test.ts", "tmp"]
 }

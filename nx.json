@@ -36,5 +36,17 @@
       }
     }
   ],
-  "nxCloudAccessToken": "ZjE2ZmVkNWUtNWYwZC00OWE2LTg2M2YtNjZiYjI2YWMxZDIyfHJlYWQtd3JpdGU="
+  "nxCloudAccessToken": "ZjE2ZmVkNWUtNWYwZC00OWE2LTg2M2YtNjZiYjI2YWMxZDIyfHJlYWQtd3JpdGU=",
+  "targetDefaults": {
+    "@nx/js:tsc": {
+      "cache": true,
+      "dependsOn": ["^build"],
+      "inputs": ["production", "^production"]
+    }
+  },
+  "release": {
+    "version": {
+      "preVersionCommand": "npx nx run-many -t build"
+    }
+  }
 }
